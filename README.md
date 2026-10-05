@@ -41,7 +41,7 @@
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
 
-
+FitFindr is a thrift-shopping agent. You type what you want in plain language, like `vintage graphic tee under $30` or `denim jacket size M/L`, and it searches 40 secondhand listings from depop, Poshmark, and thredUp for the best match within your budget and size. For the top match, it asks a model for one or two outfits built from pieces already in your wardrobe (or general styling advice if your wardrobe is empty). Then it writes a short caption you could actually post about the find. If nothing matches, it stops early and tells you what to change: raise the budget, drop the size, or use broader keywords.
 
 ---
 
@@ -128,8 +128,14 @@ I checked the handoff by wrapping the two model tools to record what they receiv
 **One full query**
 
 ```
-$ python app.py ask '...'
+$ python app.py ask 'vintage graphic tee under $30'
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
 
+  Outfit:   Pair the Y2K baby tee with your baggy straight-leg jeans, black cropped zip hoodie, and chunky white sneakers. Add the black crossbody bag to finish the nostalgic look.
+
+Style the Y2K baby tee tucked into your wide-leg khaki trousers, layered under your vintage black denim jacket, and paired with your black combat boots.
+
+  Fit card: Found this little Y2K butterfly baby tee and I am obsessed with the pink and purple print. It looks so good styled with baggy denim and a zip hoodie for that ultimate 2000s mall rat vibe, or dressed down a bit with wide-leg trousers and combat boots. Grabbed it on depop for just $18 and it is in such good shape.
 ```
 
 **The three tools, tested one at a time**
@@ -164,15 +170,20 @@ Nothing beats a classic pair of vintage Levi's 501s, especially when they fit ju
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I asked Claude (in Claude Code) to build the missing planning loop in `agent.py::run_agent`, including a way to parse the query into a description, size, and max price.
+- *What came back:* A `while` loop driven by a `next_step` variable, with `trace.check_iterations` on every pass, plus a regex parser, `parse_query`. Testing the parser on a few phrases turned up a bug: `denim jacket size M/L` parsed as size `"M"`, and the leftover `"l"` ended up in the description (`"denim jacket l"`). The search would have looked for the wrong size and a meaningless keyword.
+- *What I changed:* The size pattern was extended to accept slash sizes like `M/L` and `S/M`. On a retest, `denim jacket size M/L` gave `{description: "denim jacket", size: "M/L"}`, and `size W30 L30` and `size US 9` also parsed correctly. Since then I've used AI to explain each step of the loop so I understand what the branch does and why it returns before `suggest_outfit`.
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
+- *What I asked for:* I gave Claude my Tool Inventory spec from this README and asked it to build all three tools in `tools.py` to match it.
+- *What came back:* Working tools, but with two mismatches between the code and my spec.
+  - My spec said a keyword scores a point if it is "found in" a listing's fields, which reads like a substring check, while the code matched whole words only.
+  - The query "graphic tee" ranked the Y2K Baby Tee above the listing actually titled "Graphic Tee — 2003 Tour". Both scored 2, and ties keep data order.
 - *What I changed:*
+  - I kept whole-word matching, because a substring check has the same problem as the `"l" in "xl"` size trap: short keywords match inside unrelated words. I rewrote the spec line to say "appears as a whole word", so the README matches the code.
+  - I left the tie order alone because it's what my spec says, and noted title weighting as a possible improvement.
+  - Testing also hit three 503/500 "high demand" errors from Gemini, which is why criterion 1 allows one miss in five.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
