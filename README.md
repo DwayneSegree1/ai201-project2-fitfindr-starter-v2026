@@ -104,9 +104,17 @@
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which --> **Regex**, in `agent.py::parse_query`, with no model call. One pattern finds the price (`under $30`, `below 60`, a bare `$25`) and turns it into `max_price` (float). A second finds the size after the word "size" (`size M`, `size M/L`, `size US 9`, `size W30 L30`) and turns it into `size` (str, uppercased). Both matches are cut out of the text, filler words like "looking for a" are dropped, and what's left becomes `description`. Anything not found is `None`. For example, `designer ballgown size XXS under $5` becomes `{description: "designer ballgown", size: "XXS", max_price: 5.0}`.
 
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** <!-- which fields, in what order --> Each step writes its result into the session, and the next step reads it back out:
+1. `query` and `wardrobe` are set by `new_session()`.
+2. `parsed` is written by `parse_query(query)`.
+3. `search_results` is written by `search_listings`, which reads `parsed`. **The branch:** if it is `[]`, `error` is set and the run returns here, so the next three fields stay `None`.
+4. `selected_item` is `search_results[0]`.
+5. `outfit_suggestion` is written by `suggest_outfit`, which reads `selected_item` and `wardrobe`.
+6. `fit_card` is written by `create_fit_card`, which reads `outfit_suggestion` and `selected_item`.
+
+I checked the handoff by wrapping the two model tools to record what they received. For `vintage graphic tee under $30`, `session["selected_item"]` was the same object (`lst_002`, Y2K Baby Tee, $18) that reached both `suggest_outfit` and `create_fit_card`. For `designer ballgown size XXS under $5`, `suggest_outfit` was never called and `fit_card` stayed `None`.
 
 ---
 
