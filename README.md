@@ -61,7 +61,7 @@
 
 - **What it does:** Filters the 40 listings in `data/` by price and size, then ranks what's left by how many of the description's keywords appear in each listing, without calling the model.
 - **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-  - `description` (str): keywords such as `"vintage graphic tee"`. It is lowercased and split on spaces. A listing scores 1 point for each keyword found in its `title`, `description`, `category`, `style_tags`, `colors`, or `brand`.
+  - `description` (str): keywords such as `"vintage graphic tee"`. It is lowercased and split on spaces. A listing scores 1 point for each keyword that appears as a whole word in its `title`, `description`, `category`, `style_tags`, `colors`, or `brand`.
   - `size` (str or None): `None` skips the size filter. Otherwise it is a match when the requested size equals the listing's whole size, or one part of it, ignoring case. Parts are split on `/` and spaces, and anything in parentheses is dropped. So `"M"` matches `"S/M"` and `"M/L"`, `"XL"` matches `"XL (oversized)"`, `"L"` does **not** match `"XL"`, and `"S"` does **not** match `"US 9"`. Listings whose size starts with `"One Size"` match any requested size.
   - `max_price` (float or None): `None` skips the price filter. Otherwise it keeps listings with `price <= max_price`.
 - **Returns:** A `list[dict]` of at most `config.SEARCH_RESULT_LIMIT` (10) listing dicts, highest keyword score first. Ties keep the order they have in the data. Listings that score 0 are dropped. Each dict has `id` (str), `title` (str), `description` (str), `category` (str), `style_tags` (list[str]), `size` (str), `condition` (str), `price` (float), `colors` (list[str]), `brand` (str or **None**: most listings have no brand), and `platform` (str).
@@ -127,18 +127,20 @@ $ python app.py ask '...'
 **The three tools, tested one at a time**
 
 ```
-$ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
-
+$ python -c "from tools import search_listings; print([(r['title'], r['price'], r['size']) for r in search_listings('graphic tee', max_price=30)])"
+[('Y2K Baby Tee — Butterfly Print', 18.0, 'S/M'), ('Graphic Tee — 2003 Tour Bootleg Style', 24.0, 'L'), ('Mesh Long-Sleeve Top — Black', 15.0, 'S/M'), ('Vintage Band Tee — Faded Grey', 19.0, 'L'), ('Low-Rise Cargo Pants — Khaki', 27.0, 'W29'), ('Vintage Graphic Hoodie — Faded Black', 26.0, 'L')]
 ```
 
 ```
-$ python -c "from tools import suggest_outfit; ..."
+$ python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
+Outfit 1: Pair the Vintage Levi's 501 Jeans with the white ribbed tank top tucked in, layered under the vintage black denim jacket. Finish with the brown leather belt, black crossbody bag, and chunky white sneakers.
 
+Outfit 2: Style the Vintage Levi's 501 Jeans with the oversized grey crewneck sweatshirt worn loose over the top. Add the black combat boots and the black crossbody bag for an easy, street-ready look.
 ```
 
 ```
-$ python -c "from tools import create_fit_card; ..."
-
+$ python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
+Nothing beats a classic pair of vintage Levi's 501s, especially when they fit just right in that perfect medium wash. I love keeping things simple with crisp white sneakers for that effortless, everyday streetwear look. Snagged these on depop for $38 and I honestly don't think I'll be taking them off.
 ```
 
 ---
