@@ -28,6 +28,7 @@ tool calls and returns a fit card — in at least 4 of 5 tries.
 <!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
      "my search is a plain keyword match and some phrasings will miss" is a
      real answer. -->
+Two of the three tools call the model on the free tier. One run makes two requests against a 15-per-minute limit, so a rate-limit retry that runs out, or a timeout, can end a try even when the loop logic is correct. The search side is a plain keyword match that needs a scoring word to appear in the listing, so a phrasing the data doesn't use can also miss. 5 of 5 would be asking the network and the free tier for something I don't control.
 
 ---
 
@@ -39,6 +40,7 @@ Given a query that matches no listings, the agent stops before calling
 **Why this target:**
 <!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
      about this path? -->
+This path never touches the model. Parsing is regex, `search_listings` is a deterministic filter over local data, and the stop is one `if not session["search_results"]` check in `run_agent`. The same input gives the same output every time, so anything less than 5 of 5 means the branch is broken, not unlucky. The error message is also built from `session["parsed"]` rather than generated, so it always names the budget, the size, or the keywords.
 
 ---
 
@@ -54,11 +56,12 @@ Given a query that matches no listings, the agent stops before calling
      compares session["selected_item"] against what actually reached
      suggest_outfit is the shape you're after. -->
 
+Given the matching query from criterion 1, every try that reaches the fit card shows the same item at all three handoffs: `session["selected_item"]["id"]` equals `session["search_results"][0]["id"]`; the title in the trace's `suggest_outfit` input and the title in its `create_fit_card` input are both that item's title; and the fit card states that item's price (e.g. `$24`) and not another listing's — in 5 of 5 tries that complete.
 
 
 **Why this target:**
 
-
+Every handoff is plain Python reading and writing the same session dict, with no model in between, so if the wrong item ever reaches a tool, that's a bug in my loop rather than variation. The price check on the fit card is the end-to-end proof: the model can only write the right price if the right dict reached it. I only count tries that complete, because a try that dies on a rate limit says nothing about state; that one is criterion 1's problem.
 
 ---
 
@@ -75,11 +78,12 @@ Given a query that matches no listings, the agent stops before calling
      sentence? A card longer than a caption anyone would post? Any of those can
      be turned into a number. -->
 
+Running the matching query from criterion 1 five times with caching off, at least 4 of the 5 fit cards are 2 to 4 sentences long and contain both the item's exact price (as `$NN`) and its platform name — and no two of the 5 cards have the same first sentence.
 
 
 **Why this target:**
 
-
+The words are supposed to change (TEMPERATURE is 0.9), so I'm scoring the parts that shouldn't change: the facts and the length. I allow 1 miss in 5 because the model sometimes drops a detail or adds a fifth sentence even when the prompt asks, and that would be a prompt-tuning problem rather than a broken tool. The "no repeated first sentence" part is strict on purpose: if two of five cards open the same way at 0.9, then caching is still on or the prompt is forcing a template, and that's exactly the failure `config.py` warns about.
 
 ---
 
@@ -92,11 +96,12 @@ Given a query that matches no listings, the agent stops before calling
      search respects a price ceiling — anything, as long as it names a number
      or an observable outcome. -->
 
+**The search respects price and size.** For the query `vintage tee size L under $25`, every listing in `session["search_results"]` has `price <= 25` and a size that matches `L` under the rule in my Tool Inventory (`L`, `L/XL`, or a One Size listing). None of them has size `XL`, `XL (oversized)`, or `XL (fits oversized)` — 5 of 5 tries.
 
 
 **Why this target:**
 
-
+The filter is deterministic code over local data, so 5 of 5 is the only honest number. I chose this query because it is built to catch the bug the starter code warns about: `"l" in "xl"` is True, and the data has two XL listings under $25 that mention "vintage" (lst_012 and lst_027). A substring filter would pass the price check and still show them. If either one shows up, my size matching is wrong, and a user who asked for a large gets an extra large.
 
 ---
 
