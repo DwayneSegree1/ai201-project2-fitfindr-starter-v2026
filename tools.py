@@ -248,8 +248,11 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         return "Can't write a fit card without an outfit suggestion."
 
     system = (
-        "You write captions for outfit posts on thrift and resale apps. "
-        "Sound like a real person posting their find, not a product listing."
+        "You write captions for a shopper who just bought this item secondhand "
+        "and is posting the outfit they made with it. Write in the buyer's "
+        "voice: they found it, paid for it, and own it now. They are not "
+        "selling it, so never say they listed it, and never tell readers to "
+        "buy or grab it. Sound like a real person, not a product listing."
     )
     prompt = (
         f"The find:\n{_describe_item(new_item)}\n\n"

@@ -455,26 +455,83 @@ The message says what broke (the model, at the outfit step), what still worked, 
 
      `python run_eval.py --label after` -->
 
-**What I changed:**
+**What I changed:** One prompt: the system prompt in `tools.py::create_fit_card`. The user prompt, which asks for the item, the `$price`, the platform and 2–4 sentences, is untouched, so the change can't be confused with a change to what criterion 4 checks.
 
-**Which failure it was meant to fix:**
+Before:
+
+```python
+"You write captions for outfit posts on thrift and resale apps. "
+"Sound like a real person posting their find, not a product listing."
+```
+
+After:
+
+```python
+"You write captions for a shopper who just bought this item secondhand "
+"and is posting the outfit they made with it. Write in the buyer's "
+"voice: they found it, paid for it, and own it now. They are not "
+"selling it, so never say they listed it, and never tell readers to "
+"buy or grab it. Sound like a real person, not a product listing."
+```
+
+**Which failure it was meant to fix:** Diagnosis 3, the fit card speaking as the seller.
+- **Where:** the model's output, steered by the prompt.
+- **Mechanism:** "thrift and resale apps" plus a platform name let the model cast itself as the person listing the item.
+- **Before:** 13 of the 25 fit cards in the before run were in the seller's voice ("I just listed on depop", "Grab this gem on my depop… before someone else snatches it up").
+- **Why this one:** no criterion missed, so I picked the problem with the clearest mechanism and a countable outcome. It's also the problem a user would notice first: a caption that tries to sell the shirt you just bought is unusable.
+
+**How I counted seller voice.** A card counts if it says the poster listed or is selling the item (`list`/`listed`/`listing`, `dropped on`, `my depop`), or tells the reader to grab or snatch it `before` someone else does. I marked all 25 before-cards by hand first, then wrote the rule as a regex and checked that it gave the same 13. The after run was scored with the same regex, and I read all 25 after-cards as well.
 
 ### Run Log — After
 
+Produced by `python run_eval.py --label after` (`run_eval.py::main` → `agent.py::run_agent`): the same scenarios, 5 tries each, caching off. The full output is in [results/run_2026-10-14_1547_after.md](results/run_2026-10-14_1547_after.md).
+
+**Before** (from [results/run_2026-10-14_1538_before.md](results/run_2026-10-14_1538_before.md)):
+
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Matching query completes all three tools and returns a fit card | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Impossible query stops before `suggest_outfit` and names what to change | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Same item at every handoff | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card: 2–4 sentences, exact `$price` and platform, no repeated first sentence | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. `vintage tee size L under $25` returns nothing over $25 and no XL sizes | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Did it help, and how do I know:**
+**After:**
 
-<!-- If it made things worse, say that. Honestly reported, that earns full
-     credit and is more interesting than one that worked. -->
+| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1. Matching query completes all three tools and returns a fit card | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Impossible query stops before `suggest_outfit` and names what to change | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Same item at every handoff | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card: 2–4 sentences, exact `$price` and platform, no repeated first sentence | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. `vintage tee size L under $25` returns nothing over $25 and no XL sizes | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
+**What the change was aimed at:** fit cards in the seller's voice, across every scenario that produces a card.
 
+| Scenario (5 cards each) | Before | After |
+|---|---|---|
+| matching query completes (criterion 1) | 3 / 5 | 0 / 5 |
+| selected item survives every handoff (criterion 3) | 4 / 5 | 0 / 5 |
+| fit card states price and platform (criterion 4) | 3 / 5 | 0 / 5 |
+| size L under $25 (criterion 5) | 3 / 5 | 0 / 5 |
+| empty wardrobe (diagnostic) | 0 / 5 | 0 / 5 |
+| **Total** | **13 / 25** | **0 / 25** |
+
+**Real output.** Criterion 4, Try 1, from `tools.py::create_fit_card`, same item (lst_002), before and after:
+
+```
+BEFORE: Obsessed with this little butterfly print baby tee I just dropped on depop for $18. It is giving major nostalgic Y2K energy paired with baggy denim and chunky sneakers for an easy off-duty look. You can also dress it down with wide-leg trousers and combat boots when you want that effortless downtown cool vibe.
+
+AFTER:  Scored this cute Y2K butterfly baby tee on depop for just $18 and I am obsessed. I tucked it into some baggy straight-leg jeans with a brown belt and threw on a vintage black denim jacket for the ultimate grungy-sweet everyday uniform. Chunky white sneakers tie the whole casual look together.
+```
+
+**Did it help, and how do I know:** It fixed what it was aimed at, and it made something else worse that none of my criteria catch.
+
+- **It helped.** Seller-voice cards went from 13 of 25 to 0 of 25, counted by the same rule on both runs, and I read all 25 after-cards to confirm. Every after-card is written by someone who bought the item: "Scored this… on depop for just $18", "Tucked it into my baggy straight-leg jeans". All five criteria still pass 5/5. Criterion 4 is the one that could have broken, since the prompt now carries more instructions. All 25 cards still contain the exact price and platform and are 2–3 sentences long.
+- **It made the openings worse.** Every one of the 25 after-cards opens with the same two words, "Scored this". Before, the 25 cards used 9 different openings ("Obsessed with" ×9, "Found this" ×6, "Scored this" ×3, "Finding this" ×2, and 5 others once each). After, there is 1. Most continue the same way too: "Scored this [item] on depop for just $18 and I am obsessed." Telling the model the poster "found it, paid for it, and own it now" gave it one obvious way to start.
+- **Why criterion 4 didn't catch it.** It checks that no two first sentences are *identical*, and "Scored this cute Y2K butterfly baby tee…" and "Scored this sweet butterfly baby tee…" are different strings. That is the loophole the template in `criteria.md` warns about: two cards that differ by one word still count as different.
+
+**Net:** the change is worth keeping, because a caption that tries to sell the shirt you just bought is a worse failure than a repetitive opening. But on the measure the change wasn't aimed at, opening variety, it made things worse. A follow-up change could ask the model to vary its openings, and that would be a separate change measured on its own.
 
 ---
 
