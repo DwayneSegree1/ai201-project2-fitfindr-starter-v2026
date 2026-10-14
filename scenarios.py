@@ -29,24 +29,41 @@ SCENARIOS = [
         "criterion": 2,
     },
     {
+        # Criterion 3 — state. Same query as criterion 1, because the criterion
+        # says "the matching query from criterion 1". What's checked is the
+        # session: selected_item id == search_results[0] id, the same title at
+        # the suggest_outfit and create_fit_card steps of the trace, and that
+        # item's price in the fit card.
+        "name": "selected item survives every handoff",
+        "query": "vintage graphic tee under $30",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+    {
+        # Criterion 4 — the fit card. The SAME item five times with caching
+        # off: 2-4 sentences, exact $price and platform in at least 4 of 5,
+        # and no two cards opening with the same sentence.
+        "name": "fit card states price and platform, varies",
+        "query": "vintage graphic tee under $30",
+        "wardrobe": "example",
+        "criterion": 4,
+    },
+    {
+        # Criterion 5 — price and size filters. Built to catch the substring
+        # bug: two XL listings under $25 mention "vintage" (lst_012, lst_027),
+        # and "l" in "xl" is True.
+        "name": "size L under $25 excludes XL and over-budget",
+        "query": "vintage tee size L under $25",
+        "wardrobe": "example",
+        "criterion": 5,
+    },
+    {
         # A user with nothing saved. One of unit 4's three failure modes.
         "name": "empty wardrobe",
         "query": "denim jacket under $50",
         "wardrobe": "empty",
         "criterion": None,
     },
-    # TODO: add what your criteria 3, 4 and 5 need.
-    #
-    # Set "criterion" to the number in criteria.md that the scenario tests.
-    # "criterion": None means a diagnostic run — useful to have, but it isn't
-    # one of your five, and run_eval.py marks it as such in the table.
-    #
-    # For a state criterion, any normal query works — what you're checking is
-    # what ends up in the session, not what the user typed.
-    #
-    # For a fit-card criterion, you probably want the SAME query listed more
-    # than once, or several different items, depending on what your criterion
-    # actually says.
 ]
 
 WARDROBES = ("example", "empty")

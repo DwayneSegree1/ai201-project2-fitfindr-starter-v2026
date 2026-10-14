@@ -203,19 +203,87 @@ Nothing beats a classic pair of vintage Levi's 501s, especially when they fit ju
      `python run_eval.py --label before` runs everything and writes the table
      into results/. Paste it here and fill in the verdicts. -->
 
+Produced by `python run_eval.py --label before` (`run_eval.py::main`, which calls `agent.py::run_agent` for every scenario in `scenarios.py`): every scenario 5 times, caching off, temperature 0.9. The full output is in [results/run_2026-10-14_1538_before.md](results/run_2026-10-14_1538_before.md). Each try was marked PASS or FAIL against the exact wording in `criteria.md`.
+
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Matching query completes all three tools and returns a fit card | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Impossible query stops before `suggest_outfit` and names what to change | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Same item at every handoff: `selected_item` id = `search_results[0]` id, same title into `suggest_outfit` and `create_fit_card`, fit card states that item's price | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card is 2–4 sentences with the exact `$price` and platform; no two of 5 share a first sentence | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. `vintage tee size L under $25` returns nothing over $25 and no XL sizes | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Real output from one try**, pasted as text, naming the file and function
-that produced it:
+**How each try was scored:**
+1. **Criterion 1:** every try had `stopped early: no` and a non-empty fit card.
+2. **Criterion 2:** every try had `search_results: 0`, a trace that ends at step 2 with no `suggest_outfit` step, and an error naming the budget, the size, and the keywords.
+3. **Criterion 3:** every try had `selected_item id: lst_002`, the first search result was `lst_002`, the trace showed `new_item='Y2K Baby Tee — Butterfly Print'` at steps 4 and 5, and the fit card said `$18` (lst_002's price).
+4. **Criterion 4:** all 5 cards were 3 sentences and contained `$18` and `depop`, and all 5 opened differently.
+5. **Criterion 5:** every try returned the same 4 listings (sizes `L`, `L`, `One Size (adjustable)`, `One Size`, highest price $24), with neither XL listing (lst_012, lst_027).
+
+**Real output from one try** (Try 1 of each criterion), pasted from the results file:
+
+**Criterion 1:** `agent.py::run_agent`, fit card written by `tools.py::create_fit_card`, query `vintage graphic tee under $30`
 
 ```
+- stopped early: no
+- selected_item: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+- search_results: 10
 
+Fit card:
+found this little butterfly baby tee on depop for just $18 and I am obsessed with the pastel print. it’s giving major early 2000s mall goth energy when you layer it under an oversized zip hoodie and baggy denim. definitely keeping this in heavy rotation for casual coffee runs.
+```
+
+**Criterion 2:** `agent.py::run_agent` (the branch after `search_listings`), message from `agent.py::_no_results_message`, query `designer ballgown size XXS under $5`
+
+```
+- stopped early: yes — No listings matched. Try to raise your budget above $5, or drop the size filter (XXS), or use broader keywords than "designer ballgown" (e.g. 'tee', 'jacket', 'jeans').
+- selected_item: (none)
+- search_results: 0
+
+[1] parse_query
+      in:  designer ballgown size XXS under $5
+      out: {'description': 'designer ballgown', 'size': 'XXS', 'max_price': 5.0}
+[2] search_listings (via MCP)
+      in:  {'description': 'designer ballgown', 'size': 'XXS', 'max_price': 5.0}
+      out: [] (empty)
+      →    branch: empty, stopping
+```
+
+**Criterion 3:** `agent.py::run_agent`, trace from `trace.py::step`, query `vintage graphic tee under $30`
+
+```
+- selected_item: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+- selected_item id: lst_002
+  - lst_002 · $18.0 · size S/M · Y2K Baby Tee — Butterfly Print      ← search_results[0]
+
+[3] select_item
+      in:  first of search_results
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+[4] suggest_outfit
+      in:  new_item='Y2K Baby Tee — Butterfly Print', wardrobe=10 items
+      out: Pair the Y2K Baby Tee — Butterfly Print with your baggy straight-leg jeans, dark wash and chunky white sneaker…
+[5] create_fit_card
+      in:  outfit (from step before), new_item='Y2K Baby Tee — Butterfly Print'
+      out: Obsessed with this little Y2K butterfly tee, especially paired with baggy denim and chunky sneakers for that u…
+
+Fit card:
+Obsessed with this little Y2K butterfly tee, especially paired with baggy denim and chunky sneakers for that ultimate off-duty model look. If you want a bit more 2000s edge, it also looks so good tucked into wide-leg trousers with combat boots and a zip hoodie. Grab this piece on my depop right now for just $18 before someone else snags it!
+```
+
+**Criterion 4:** `tools.py::create_fit_card`, query `vintage graphic tee under $30`
+
+```
+Obsessed with this little butterfly print baby tee I just dropped on depop for $18. It is giving major nostalgic Y2K energy paired with baggy denim and chunky sneakers for an easy off-duty look. You can also dress it down with wide-leg trousers and combat boots when you want that effortless downtown cool vibe.
+```
+
+**Criterion 5:** `tools.py::search_listings`, called through `mcp_server.py` by `agent.py::run_agent`, query `vintage tee size L under $25`
+
+```
+- search_results: 4
+  - lst_006 · $24.0 · size L · Graphic Tee — 2003 Tour Bootleg Style
+  - lst_033 · $19.0 · size L · Vintage Band Tee — Faded Grey
+  - lst_014 · $12.0 · size One Size (adjustable) · Leather Belt — Brown, Braided
+  - lst_034 · $14.0 · size One Size · Bucket Hat — Reversible, Brown Plaid
 ```
 
 ---
