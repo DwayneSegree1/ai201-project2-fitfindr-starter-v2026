@@ -185,6 +185,28 @@ Nothing beats a classic pair of vintage Levi's 501s, especially when they fit ju
   - I left the tie order alone because it's what my spec says, and noted title weighting as a possible improvement.
   - Testing also hit three 503/500 "high demand" errors from Gemini, which is why criterion 1 allows one miss in five.
 
+**Unit 4**
+
+In unit 4 I used AI (Claude, in Claude Code) to understand each milestone before doing it: what the step was asking for, why it mattered, and what a good result would look like. Three moments where the answer changed what I did:
+
+**Moment 3: the model-unavailable failure**
+
+- *What I asked for:* help triggering the three failure modes and adding a handler for any that crashed.
+- *What came back:* with one character of the API key changed, the run printed `ModelUnavailable: The model rejected your API key…` with no stack trace. That looked handled. Claude pointed out that the message came from the catch-all `except Exception` in `app.py::main`, not from my agent. `session["error"]` was never set, and the message didn't say which step had failed.
+- *What I changed:* I added a `ModelUnavailable` handler in `agent.py::run_agent` around `suggest_outfit` and `create_fit_card`, and an `MCPError` handler around the search. The message now names the step that failed, what the search had already found, and what to do. I learned that "it didn't crash" and "my agent handled it" are not the same thing.
+
+**Moment 4: the improvement made something else worse**
+
+- *What I asked for:* help choosing one improvement, then making it and measuring it.
+- *What came back:* Claude suggested the fit card's seller voice ("I just listed on depop"). It counted that by hand in the before run, 13 of 25, then wrote the rule as a regex and checked it gave the same count, so the after run would be scored the same way. It rewrote the system prompt in `tools.py::create_fit_card` so the caption is written as the buyer.
+- *What I changed:* the rewrite took seller voice to 0 of 25, but reading the after-cards showed all 25 now open "Scored this". Criterion 4 didn't catch it, because it only rejects *identical* first sentences. I kept the change and reported the side effect instead of calling it a clean win. I listed revising criterion 4 under What's Still Broken.
+
+**Moment 5: checking a claim against the data**
+
+- *What I asked for:* a draft of What's Still Broken.
+- *What came back:* the draft said a listing with `brand: None` had never reached the fit card in a scored scenario. Before keeping it, Claude checked the listings. Both scored items (lst_002 and lst_006) have `brand: None`, so the claim was backwards.
+- *What I changed:* the line now says the untested case is a *branded* item. The lesson I took: a confident sentence in a README still has to be checked against the data.
+
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
      Don't fill these in during unit 3.
@@ -540,6 +562,37 @@ AFTER:  Scored this cute Y2K butterfly baby tee on depop for just $18 and I am o
 <!-- For each criterion still missed: what you'd do, and why you stopped where
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
      left is not. -->
+
+**No criterion is still missed.** All five were MET 5/5 before and after the improvement. That is not the same as nothing being broken. The run output shows four problems my criteria don't catch, and two of them come from criteria that are too weak.
+
+**1. The search picks the top item by file order when keywords tie.** (Diagnoses 1 and 2, `tools.py::search_listings`.)
+- **What's wrong:** for `vintage graphic tee`, three listings score 3 out of 3 keywords. The Y2K Baby Tee wins only because it comes first in the data file, ahead of the listing actually titled "Graphic Tee". Any listing with one matching word also makes the top 10: cargo pants, a slip dress, a belt.
+- **What I'd do:** count a title match double, so "Graphic Tee" outranks a listing that only mentions "graphic" in its description. I'd also drop results that score less than half of the top score.
+- **Why I stopped:** the unit allows one change, and I spent it on the fit card. This fix would also change which item gets selected for the criterion 1, 3 and 4 query, probably lst_006 instead of lst_002. Making it in the same run as the prompt change would have mixed the two effects together, so I couldn't have said which one moved the fit-card numbers.
+
+**2. Every fit card now opens "Scored this".** (A side effect of my improvement, `tools.py::create_fit_card`.)
+- **What's wrong:** 25 of 25 after-cards open with the same two words, against 9 different openings before.
+- **What I'd do:** add one line to the system prompt asking for a varied opening that doesn't start with "Scored". Then re-run and count distinct openings alongside seller voice, so I'd see whether fixing variety brings the seller voice back.
+- **Why I stopped:** it would be a second prompt change, and the one-change rule means it gets its own before/after run.
+
+**3. Criterion 4 can't detect repetitive cards.**
+- **What's wrong:** "No two first sentences the same" compares exact strings, so 25 cards that all open "Scored this… and I am obsessed" still pass.
+- **What I'd do:** add a revision under criterion 4 in `criteria.md`, keeping the original line: *no two of the 5 cards share their first three words.* That is a revision because the original couldn't measure what it claimed to (variety), not because it was missed. It would fail on the after run, and it should.
+- **Why I stopped:** I found the loophole while measuring the improvement, and the revision only makes sense alongside the fix in item 2.
+
+**4. Criteria 1, 3 and 4 were all tested on one query and one item (lst_002).**
+- **What's wrong:** five tries of the same input show the loop is consistent, not that it works across items. Both scored items (lst_002 and lst_006) have `brand: None`. A branded item only reached the fit card in the empty-wardrobe scenario, which isn't one of the five criteria, and a shoe or One Size accessory never did.
+- **What I'd do:** add scored scenarios for a branded item, a shoe and a One Size item.
+- **Why I stopped:** each extra scenario adds 10 model calls on the free tier. I wanted the before and after runs to be the same set, so I kept the set fixed once the before run existed.
+
+**Smaller things:**
+- **A model failure partway through leaves a partial session.** When the model is unreachable, `run_agent` stops with a clear message, but `search_results` and `selected_item` stay filled while `outfit_suggestion` and `fit_card` are `None`. Anything that reads the session has to check `session["error"]` first, as the docstring says.
+- **The MCP call is about 1,000 times slower than the direct call.** See the line below.
+
+**On the MCP move:**
+- **What changed in the code:** `search_listings` is registered in `mcp_server.py`, and `agent.py::run_agent` calls it through `call_tool("search_listings", {...})` instead of importing it from `tools.py`. A new `except MCPError` stops the run with a message if the server can't start.
+- **Behaviour:** results did not change. The same three queries, including the empty one, returned identical lists direct and over MCP, and `[]` stayed `[]`, so the branch didn't need touching.
+- **Speed:** this did change. Averaged over 5 calls, the direct call took 0.8 ms and the MCP call took 779 ms, because `mcp_client.call_tool` starts a fresh server process for every call. With one search per run that's invisible next to the model calls. A loop that searched repeatedly would need a connection kept open.
 
 
 
