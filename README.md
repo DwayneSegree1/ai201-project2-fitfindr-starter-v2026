@@ -308,15 +308,41 @@ Obsessed with this little butterfly print baby tee I just dropped on depop for $
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | Matching query completes all three tools and returns a fit card | 4 of 5 | **MET** (5/5) | All 5 tries had `stopped early: no` and a non-empty fit card. 5 passes against a target of 4. |
+| 2 | Impossible query stops before `suggest_outfit` and names what to change | 5 of 5 | **MET** (5/5) | All 5 tries had `search_results: 0`, a trace that ends at step 2 with no `suggest_outfit` step, and an error naming the budget, the size, and the keywords. |
+| 3 | Same item at every handoff | 5 of 5 | **MET** (5/5) | In all 5, `selected_item` id and `search_results[0]` id were both `lst_002`, steps 4 and 5 of the trace both had `new_item='Y2K Baby Tee — Butterfly Print'`, and the card said `$18`. |
+| 4 | Fit card: 2–4 sentences, exact `$price` and platform, no repeated first sentence | 4 of 5 | **MET** (5/5) | Every card was 3 sentences with `$18` and `depop`, and all 5 first sentences differ. I read all five, not just the script's count. |
+| 5 | `vintage tee size L under $25` returns nothing over $25 and no XL sizes | 5 of 5 | **MET** (5/5) | All 5 tries returned the same 4 listings (sizes `L`, `L`, `One Size (adjustable)`, `One Size`, highest price $24). Neither XL listing (lst_012, lst_027) appeared. |
 
 **Diagnoses**
 
+**No criterion missed**, so there is no miss to diagnose. The passes split in two:
 
+- **Criteria 2, 3 and 5 never touch the model.** Parsing is regex, the search is a deterministic filter, and the handoffs are plain dict reads, so they pass every time or fail every time. Five identical results is what a correct deterministic path looks like, not luck.
+- **Criteria 1 and 4 depend on the model.** Their 1-in-5 allowance went unused because the run made 50 requests with no errors and no retries that ran out (the rate limiter paused but never failed). It also helped that the prompt hands the model the exact price string (`$18`) and the platform, so they appear verbatim.
+
+**What the criteria didn't catch.** Reading the output, I found three problems that none of the five criteria measure. They are what I'd point the improvement at.
+
+1. **The search ranks a three-way tie by file order (a tool problem: `tools.py::search_listings`).**
+   - For `vintage graphic tee`, `lst_002` (Y2K Baby Tee), `lst_006` (Graphic Tee — 2003 Tour Bootleg Style) and `lst_033` (Vintage Band Tee) each match all three keywords, so they score 3.
+   - `sorted()` is stable, so the tie is broken by order in the data file, and `lst_002` wins only because it comes first.
+   - The cause is that the score is `len(keywords & haystack)`: a word in the description counts the same as a word in the title. The listing actually named "Graphic Tee" gets no credit for it.
+   - Criterion 3 still passed, because the loop faithfully passed on the item the search picked. Its job is to catch a handoff bug, not a ranking one.
+
+2. **Weak keyword matches pad the results (also `tools.py::search_listings`).**
+   - Any listing that scores at least 1 is kept, so one generic word is enough to get in.
+   - For `vintage graphic tee`, the top 10 includes Low-Rise Cargo Pants (only "tee" matched, from its description), a Silk Slip Dress and a Leather Belt (only "vintage").
+   - For `vintage tee size L`, it returns a belt and a bucket hat. They match "vintage" in the description, and One Size listings pass any size filter, as my Tool Inventory says they should.
+   - Criterion 5 passed because it checks only price and size, not whether a tee search returns tees.
+   - This is the same mechanism as problem 1, a flat keyword count with a threshold of 1, so it is one problem, not two.
+
+3. **The fit card sometimes speaks as the seller (the model's output, steered by the prompt in `tools.py::create_fit_card`).**
+   - 3 of the 5 criterion-4 cards read as the seller: "I just dropped on depop", "I just listed on depop", "instantly knew I had to list it on depop".
+   - So did criterion 3's Try 1: "Grab this piece on my depop right now".
+   - The system prompt says "captions for outfit posts on thrift and resale apps", and "resale" plus a platform name lets the model read itself as the lister.
+   - Criterion 4 checks for the price and platform, not whose voice it is, so all of these passed. A user who bought the item would not post them.
+
+**The pattern:** the criteria check that the loop works (it stops, it hands on, it filters), and every one of those holds. What isn't checked is whether the search picks the best item and whether the caption reads like a buyer's post. Both problems sit at the edges of the loop: in a tool's scoring and in a prompt, not in the branch or the session.
 
 ---
 
